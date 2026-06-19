@@ -20,18 +20,30 @@ export default function StepUpdateButtons({ orderId }: StepUpdateButtonsProps) {
   const currentStepIndex = PROCESSING_STEPS.indexOf(order.currentStep);
 
   const getStepStatus = (
-    stepName: ProcessingStepName,
-    index: number
+    stepName: ProcessingStepName
   ): "completed" | "active" | "pending" => {
     const stepRecord = order.steps.find((s) => s.stepName === stepName);
-    if (stepRecord?.status === "completed") return "completed";
-    if (index === currentStepIndex) return "active";
+    if (!stepRecord) return "pending";
+    if (stepRecord.status === "completed") return "completed";
+    if (stepRecord.status === "in_progress") return "active";
     return "pending";
   };
 
+  const getCurrentInProgressIndex = (): number => {
+    return order.steps.findIndex((s) => s.status === "in_progress");
+  };
+
+  const getActiveStepIndex = (): number => {
+    const inProgressIndex = getCurrentInProgressIndex();
+    if (inProgressIndex !== -1) return inProgressIndex;
+    return PROCESSING_STEPS.indexOf(order.currentStep);
+  };
+
   const canAdvanceTo = (index: number): boolean => {
-    const status = getStepStatus(PROCESSING_STEPS[index], index);
-    return status === "pending" && index === currentStepIndex + 1;
+    const activeStepIndex = getActiveStepIndex();
+    const status = getStepStatus(PROCESSING_STEPS[index]);
+
+    return status === "pending" && index === activeStepIndex + 1;
   };
 
   const handleStepClick = (index: number) => {
@@ -65,7 +77,7 @@ export default function StepUpdateButtons({ orderId }: StepUpdateButtonsProps) {
 
       <div className="flex items-center gap-2">
         {PROCESSING_STEPS.map((stepName, index) => {
-          const status = getStepStatus(stepName, index);
+          const status = getStepStatus(stepName);
           const canClick = canAdvanceTo(index);
 
           return (

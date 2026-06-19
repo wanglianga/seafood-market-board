@@ -142,7 +142,7 @@ export function createMockOrder(
   processingFee: number
 ): Order {
   const steps: ProcessingStepRecord[] = [
-    { stepName: "weighing", status: "pending" },
+    { stepName: "weighing", status: "in_progress" },
     { stepName: "slaughtering", status: "pending" },
     { stepName: "cooking", status: "pending" },
     { stepName: "packing", status: "pending" },
