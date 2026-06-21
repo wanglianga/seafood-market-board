@@ -5,23 +5,46 @@ export interface ProcessingMethod {
   estimatedMinutes: number;
 }
 
+export type PoolEventType = "low_oxygen" | "temporary_transfer" | "sold_out" | "new_arrival" | "normal";
+
+export interface SubstituteInfo {
+  id: string;
+  name: string;
+  emoji: string;
+  pricePerJin: number;
+  weightMin: number;
+  weightMax: number;
+  specDiff: string;
+  priceDiff: number;
+}
+
 export interface SeafoodItem {
   id: string;
   name: string;
   category: string;
   emoji: string;
   poolNumber: string;
+  originalPoolNumber: string;
   vitalityStatus: "alive" | "weak" | "dead" | "low_oxygen";
   pricePerJin: number;
+  originalPricePerJin: number;
   weightMin: number;
   weightMax: number;
   unit: string;
   processingMethods: ProcessingMethod[];
   isSoldOut: boolean;
   substituteId?: string;
+  substituteInfo?: SubstituteInfo;
   lastWaterChange: string;
   isLowOxygen: boolean;
+  isNewArrival: boolean;
+  isTemporaryTransferred: boolean;
+  poolEvent: PoolEventType;
+  eventMessage?: string;
+  needsOrderReconfirm: boolean;
   description: string;
+  priceChangeReason?: string;
+  arrivalTime?: string;
 }
 
 export type ProcessingStepName =
@@ -30,6 +53,17 @@ export type ProcessingStepName =
   | "cooking"
   | "packing"
   | "pickup";
+
+export interface WeightModificationRecord {
+  id: string;
+  previousWeight: number;
+  newWeight: number;
+  previousPrice: number;
+  newPrice: number;
+  reason: string;
+  modifiedAt: string;
+  modifiedBy: string;
+}
 
 export interface Order {
   id: string;
@@ -44,13 +78,18 @@ export interface Order {
   currentStep: ProcessingStepName;
   createdAt: string;
   completedAt?: string;
-  status: "pending" | "processing" | "ready" | "completed" | "cancelled";
+  status: "pending" | "processing" | "ready" | "completed" | "cancelled" | "waiting_confirm";
+  weightConfirmed: boolean;
+  weightModifications: WeightModificationRecord[];
+  supplementAmount?: number;
+  refundAmount?: number;
+  needsCustomerConfirm: boolean;
   steps: ProcessingStepRecord[];
 }
 
 export interface ProcessingStepRecord {
   stepName: ProcessingStepName;
-  status: "pending" | "in_progress" | "completed";
+  status: "pending" | "in_progress" | "completed" | "skipped";
   timestamp?: string;
 }
 

@@ -1,10 +1,11 @@
-import { Check, ClipboardCheck } from "lucide-react";
+import { Check, ClipboardCheck, AlertCircle } from "lucide-react";
 import { useOrderStore } from "@/hooks/useOrderStore";
 import {
   PROCESSING_STEPS,
   PROCESSING_STEP_LABELS,
   type ProcessingStepName,
 } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 interface StepUpdateButtonsProps {
   orderId: string;
@@ -14,6 +15,7 @@ export default function StepUpdateButtons({ orderId }: StepUpdateButtonsProps) {
   const order = useOrderStore((s) => s.getOrderById(orderId));
   const advanceStep = useOrderStore((s) => s.advanceStep);
   const completeOrder = useOrderStore((s) => s.completeOrder);
+  const confirmWeight = useOrderStore((s) => s.confirmWeight);
 
   if (!order) return null;
 
@@ -43,11 +45,25 @@ export default function StepUpdateButtons({ orderId }: StepUpdateButtonsProps) {
     const activeStepIndex = getActiveStepIndex();
     const status = getStepStatus(PROCESSING_STEPS[index]);
 
-    return status === "pending" && index === activeStepIndex + 1;
+    if (status !== "pending") return false;
+    if (index !== activeStepIndex + 1) return false;
+
+    const nextStep = PROCESSING_STEPS[index];
+    if (nextStep === "slaughtering" && !order.weightConfirmed && order.actualWeight != null) {
+      return false;
+    }
+
+    return true;
   };
 
   const handleStepClick = (index: number) => {
     if (!canAdvanceTo(index)) return;
+
+    const nextStep = PROCESSING_STEPS[index];
+    if (nextStep === "slaughtering" && order.needsCustomerConfirm && !order.weightConfirmed) {
+      confirmWeight(orderId);
+    }
+
     advanceStep(orderId);
   };
 
@@ -59,6 +75,12 @@ export default function StepUpdateButtons({ orderId }: StepUpdateButtonsProps) {
   const isLastStepReady =
     order.currentStep === "pickup" &&
     order.steps.find((s) => s.stepName === "pickup")?.status === "in_progress";
+
+  const isWeightPendingConfirm =
+    order.currentStep === "weighing" &&
+    order.actualWeight != null &&
+    !order.weightConfirmed &&
+    order.needsCustomerConfirm;
 
   return (
     <div className="space-y-3">
@@ -74,6 +96,15 @@ export default function StepUpdateButtons({ orderId }: StepUpdateButtonsProps) {
           </>
         )}
       </div>
+
+      {isWeightPendingConfirm && (
+        <div className="bg-amber-500/20 border border-amber-500/50 rounded-lg p-2 flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+          <span className="text-amber-400 text-xs">
+            等待顾客确认称重，暂不能推进
+          </span>
+        </div>
+      )}
 
       <div className="flex items-center gap-2">
         {PROCESSING_STEPS.map((stepName, index) => {
@@ -93,6 +124,7 @@ export default function StepUpdateButtons({ orderId }: StepUpdateButtonsProps) {
                   ? "progress-step-active"
                   : "progress-step-pending",
                 canClick ? "cursor-pointer hover:scale-110" : "cursor-default",
+                !canClick && status === "pending" && "opacity-50",
               ]
                 .filter(Boolean)
                 .join(" ")}
@@ -108,6 +140,23 @@ export default function StepUpdateButtons({ orderId }: StepUpdateButtonsProps) {
           );
         })}
       </div>
+
+      {isWeightPendingConfirm && (
+        <button
+          className={cn(
+            "w-full flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium",
+            "bg-amber-500/20 text-amber-400 border border-amber-500/50",
+            "hover:bg-amber-500/30 transition-colors"
+          )}
+          onClick={() => {
+            confirmWeight(orderId);
+            advanceStep(orderId);
+          }}
+        >
+          <Check className="w-4 h-4" />
+          代顾客确认并推进
+        </button>
+      )}
 
       {isLastStepReady && (
         <button

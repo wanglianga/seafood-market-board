@@ -16,6 +16,12 @@ const STATUS_CONFIG: Record<
     textClass: "text-yellow-400",
     pulse: false,
   },
+  waiting_confirm: {
+    label: "待确认称重",
+    bgClass: "bg-amber-500/20",
+    textClass: "text-amber-400",
+    pulse: true,
+  },
   processing: {
     label: "加工中",
     bgClass: "bg-coral-500/20",

@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
-import type { Order, ProcessingStepRecord } from "@/lib/types";
+import type { Order, ProcessingStepRecord, WeightModificationRecord } from "@/lib/types";
 import { MOCK_ORDERS, createMockOrder } from "@/lib/mockData";
 import { useSeafoodStore } from "./useSeafoodStore";
 
@@ -13,12 +13,15 @@ interface OrderState {
     processingMethod: string,
     processingFee: number
   ) => Order;
-  updateOrderWeight: (orderId: string, actualWeight: number) => void;
+  updateOrderWeight: (orderId: string, actualWeight: number, reason?: string) => void;
+  confirmWeight: (orderId: string) => void;
+  modifyWeight: (orderId: string, newWeight: number, reason: string, modifiedBy?: string) => void;
   advanceStep: (orderId: string) => void;
   completeOrder: (orderId: string) => void;
   cancelOrder: (orderId: string) => void;
   getOrderById: (id: string) => Order | undefined;
   getOrdersByStatus: (status: Order["status"]) => Order[];
+  getWeightDiff: (orderId: string) => { weightDiff: number; priceDiff: number } | undefined;
 }
 
 const ORDER_STORE_KEY = "seafood-order-store";
@@ -27,7 +30,7 @@ export const useOrderStore = create<OrderState>()(
   persist(
     (set, get) => ({
   orders: MOCK_ORDERS,
-  currentQueueNumber: 104,
+  currentQueueNumber: 105,
 
   createOrder: (seafoodId, estimatedWeight, processingMethod, processingFee) => {
     const seafood = useSeafoodStore.getState().getSeafoodById(seafoodId);
@@ -45,14 +48,75 @@ export const useOrderStore = create<OrderState>()(
     return order;
   },
 
-  updateOrderWeight: (orderId, actualWeight) =>
+  updateOrderWeight: (orderId, actualWeight, reason) =>
     set((state) => ({
       orders: state.orders.map((o) => {
         if (o.id !== orderId) return o;
         const seafood = useSeafoodStore.getState().getSeafoodById(o.seafoodId);
         if (!seafood) return o;
         const actualPrice = Math.round(actualWeight * seafood.pricePerJin + o.processingFee);
-        return { ...o, actualWeight, actualPrice };
+        const priceDiff = actualPrice - o.estimatedPrice;
+        const needsCustomerConfirm = Math.abs(priceDiff) > 5;
+
+        return {
+          ...o,
+          actualWeight,
+          actualPrice,
+          supplementAmount: priceDiff > 0 ? priceDiff : undefined,
+          refundAmount: priceDiff < 0 ? Math.abs(priceDiff) : undefined,
+          needsCustomerConfirm,
+          status: needsCustomerConfirm ? "waiting_confirm" : o.status,
+        };
+      }),
+    })),
+
+  confirmWeight: (orderId) =>
+    set((state) => ({
+      orders: state.orders.map((o) => {
+        if (o.id !== orderId) return o;
+        return {
+          ...o,
+          weightConfirmed: true,
+          needsCustomerConfirm: false,
+          status: o.currentStep === "weighing" ? "pending" : o.status,
+        };
+      }),
+    })),
+
+  modifyWeight: (orderId, newWeight, reason, modifiedBy = "员工") =>
+    set((state) => ({
+      orders: state.orders.map((o) => {
+        if (o.id !== orderId) return o;
+        const seafood = useSeafoodStore.getState().getSeafoodById(o.seafoodId);
+        if (!seafood) return o;
+
+        const previousWeight = o.actualWeight ?? o.estimatedWeight;
+        const previousPrice = o.actualPrice ?? o.estimatedPrice;
+        const newPrice = Math.round(newWeight * seafood.pricePerJin + o.processingFee);
+
+        const modification: WeightModificationRecord = {
+          id: `WM-${Date.now()}`,
+          previousWeight,
+          newWeight,
+          previousPrice,
+          newPrice,
+          reason,
+          modifiedAt: new Date().toISOString(),
+          modifiedBy,
+        };
+
+        const priceDiff = newPrice - o.estimatedPrice;
+
+        return {
+          ...o,
+          actualWeight: newWeight,
+          actualPrice: newPrice,
+          weightModifications: [...o.weightModifications, modification],
+          supplementAmount: priceDiff > 0 ? priceDiff : undefined,
+          refundAmount: priceDiff < 0 ? Math.abs(priceDiff) : undefined,
+          needsCustomerConfirm: true,
+          status: "waiting_confirm",
+        };
       }),
     })),
 
@@ -60,6 +124,10 @@ export const useOrderStore = create<OrderState>()(
     set((state) => ({
       orders: state.orders.map((o) => {
         if (o.id !== orderId) return o;
+
+        if (o.currentStep === "slaughtering" && !o.weightConfirmed && o.actualWeight != null) {
+          return o;
+        }
 
         const inProgressIndex = o.steps.findIndex(
           (s) => s.status === "in_progress"
@@ -144,6 +212,15 @@ export const useOrderStore = create<OrderState>()(
   getOrderById: (id) => get().orders.find((o) => o.id === id),
 
   getOrdersByStatus: (status) => get().orders.filter((o) => o.status === status),
+
+  getWeightDiff: (orderId) => {
+    const order = get().orders.find((o) => o.id === orderId);
+    if (!order || order.actualWeight == null || order.actualPrice == null) return undefined;
+    return {
+      weightDiff: order.actualWeight - order.estimatedWeight,
+      priceDiff: order.actualPrice - order.estimatedPrice,
+    };
+  },
     }),
     {
       name: ORDER_STORE_KEY,

@@ -9,6 +9,7 @@ import { useSeafoodStore } from "@/hooks/useSeafoodStore";
 
 const STATUS_BORDER: Record<Order["status"], string> = {
   pending: "border-l-yellow-400",
+  waiting_confirm: "border-l-amber-500",
   processing: "border-l-coral-500",
   ready: "border-l-jade-500",
   completed: "border-l-gray-500",
